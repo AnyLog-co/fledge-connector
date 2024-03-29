@@ -132,7 +132,7 @@ class NumpyEncoder(json.JSONEncoder):
 class NumpyEncoderBase64(json.JSONEncoder):
 
     def default(self, obj):
-        """If input object is an ndarray it will be converted into a dict
+        """If input object in a ndarray it will be converted into a dict
         holding dtype, shape and the data
         """
         if isinstance(obj, np.ndarray):
@@ -251,12 +251,10 @@ class HttpNorthPlugin(object):
         async with session.post(f'http://{url}', data=json.dumps(payload), headers=headers) as resp:
             result = await resp.text()
             status_code = resp.status
-            if status_code in range(400, 500):
-                _LOGGER.error("Bad request error code: %d, reason: %s", status_code, resp.reason)
-                raise Exception
-            if status_code in range(500, 600):
+            if   status_code < 200 or status_code > 299:
                 _LOGGER.error("Server error code: %d, reason: %s", status_code, resp.reason)
                 raise Exception
+
             return result
 
     async def _put_data(self, url, payload, session):
@@ -276,12 +274,10 @@ class HttpNorthPlugin(object):
         async with session.put(f'http://{url}', data=json.dumps(data), headers=headers) as resp:
             result = await resp.text()
             status_code = resp.status
-            if status_code in range(400, 500):
-                _LOGGER.error("Bad request error code: %d, reason: %s", status_code, resp.reason)
-                raise Exception
-            if status_code in range(500, 600):
+            if status_code < 200 or status_code > 299:
                 _LOGGER.error("Server error code: %d, reason: %s", status_code, resp.reason)
                 raise Exception
+
             return result
 
     async def _send(self, url, payloads, session):
