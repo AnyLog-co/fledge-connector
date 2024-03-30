@@ -269,7 +269,7 @@ class HttpNorthPlugin(object):
         data = {"timestamp": payload['timestamp']}
 
         for key in payload['readings']:
-            data[key] = data['readings'][key]
+            data[key] = payload['readings'][key]
         _LOGGER.info(f"Inserting Data: {json.dumps(data)}")
         async with session.put(f'http://{url}', data=json.dumps(data), headers=headers) as resp:
             result = await resp.text()
