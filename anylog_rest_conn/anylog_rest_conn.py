@@ -17,8 +17,8 @@ import numpy as np
 from fledge.common import logger
 from fledge.plugins.north.common.common import *
 
-__author__ = "Ori Shadmon"
-__copyright__ = "Copyright (c) AnyLog Co."
+__author__ = "Ashish Jabble, Praveen Garg"
+__copyright__ = "Copyright (c) 2018 Dianomic Systems"
 __license__ = "Apache 2.0"
 __version__ = "${VERSION}"
 
@@ -30,7 +30,6 @@ config = ""
 
 _CONFIG_CATEGORY_NAME = "HTTP"
 _CONFIG_CATEGORY_DESCRIPTION = "HTTP North Plugin"
-
 
 _DEFAULT_CONFIG = {
     'plugin': {
@@ -108,6 +107,7 @@ _DEFAULT_CONFIG = {
         "displayName": "Database Name"
     }
 }
+
 
 def plugin_info():
     return {
@@ -232,7 +232,8 @@ class HttpNorthPlugin(object):
             num_count += len(payload_block)
         return num_count
 
-    async def _put_data(self, url, payload, session):
+    async def _send(self, url, payload, session):
+        """ Send the payload, using provided socket session """
         headers = {
             'type': 'json',
             'dbms': payload['dbms'],
@@ -240,8 +241,13 @@ class HttpNorthPlugin(object):
             'mode': 'streaming',
             'Content-Type': 'text/plain'
         }
-
-        data = {"timestamp": payload['timestamp']}
-
-        for key in payload['readings']:
-            data[key] = payload['readings'][key]
+        async with session.post(url, data=json.dumps(payload), headers=headers) as resp:
+            result = await resp.text()
+            status_code = resp.status
+            if status_code in range(400, 500):
+                _LOGGER.error("Bad request error code: %d, reason: %s", status_code, resp.reason)
+                raise Exception
+            if status_code in range(500, 600):
+                _LOGGER.error("Server error code: %d, reason: %s", status_code, resp.reason)
+                raise Exception
+            return result
