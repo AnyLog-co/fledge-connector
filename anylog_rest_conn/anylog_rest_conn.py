@@ -270,7 +270,7 @@ class HttpNorthPlugin(object):
 
         for key in payload['readings']:
             data[key] = data['readings'][key]
-
+        _LOGGER.info(f"Inserting Data: {json.dumps(data)}")
         async with session.put(f'http://{url}', data=json.dumps(data), headers=headers) as resp:
             result = await resp.text()
             status_code = resp.status
