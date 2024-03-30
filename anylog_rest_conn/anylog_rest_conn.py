@@ -8,39 +8,35 @@
 
 import aiohttp
 import asyncio
-import os
+import json
 import logging
 import base64
-import json
-import numpy as np
 
+import numpy as np
 
 from fledge.common import logger
 from fledge.plugins.north.common.common import *
 
-
-FILE_PATH=os.path.expandvars(os.path.expanduser('$HOME/data.json'))
-
 __author__ = "Ori Shadmon"
-__copyright__ = "Copyright (c) 2022 AnyLog Co."
+__copyright__ = "Copyright (c) AnyLog Co."
 __license__ = "Apache 2.0"
 __version__ = "${VERSION}"
 
 _LOGGER = logger.setup(__name__, level=logging.INFO)
 
-# https://fledge-iot.s3.amazonaws.com/1.9.2/ubuntu2004/x86_64/fledge-1.9.2_x86_64_ubuntu2004.tgz
+
 http_north = None
 config = ""
 
-_CONFIG_CATEGORY_NAME = "AnyLog-Conn"
-_CONFIG_CATEGORY_DESCRIPTION = "Send Data via REST into AnyLog"
+_CONFIG_CATEGORY_NAME = "HTTP"
+_CONFIG_CATEGORY_DESCRIPTION = "HTTP North Plugin"
 
 _DEFAULT_CONFIG = {
     'plugin': {
-         'description': 'HTTP North Plugin',
-         'type': 'string',
-         'default': 'anylog_rest_conn',
-         'readonly': 'true'
+        'description': 'HTTP North Plugin',
+        'type': 'string',
+        'default': 'anylog_rest_conn',
+        'readonly': 'true'
     },
     'url': {
         'description': 'AnyLog REST connection information (IP:Port)',
@@ -58,12 +54,12 @@ _DEFAULT_CONFIG = {
         "displayName": "REST Protocol"
     },
     "source": {
-         "description": "Source of data to be sent on the stream. May be either readings or statistics.",
-         "type": "enumeration",
-         "default": "readings",
-         "options": [ "readings", "statistics" ],
-         'order': '3',
-         'displayName': 'Source'
+        "description": "Source of data to be sent on the stream. May be either readings or statistics.",
+        "type": "enumeration",
+        "default": "readings",
+        "options": ["readings", "statistics"],
+        'order': '3',
+        'displayName': 'Source'
     },
     "verifySSL": {
         "description": "Verify SSL certificate",
@@ -113,50 +109,10 @@ _DEFAULT_CONFIG = {
 }
 
 
-async def write_json_to_file(data):
-    import aiofiles
-    async with aiofiles.open('/tmp/output.json', 'a') as file:
-        await file.write(json.dumps(data, indent=2))
-
-# https://stackoverflow.com/questions/3488934/simplejson-and-numpy-array/24375113#24375113
-class NumpyEncoder(json.JSONEncoder):
-
-    def default(self, obj):
-        """If input object is an ndarray it will be converted into a dict
-        holding dtype, shape and the data
-        """
-        if isinstance(obj, np.ndarray):
-            obj_data = np.ascontiguousarray(obj).data
-            data_list = obj_data.tolist()
-            return dict(__ndarray__=data_list,
-                        dtype=str(obj.dtype),
-                        shape=obj.shape)
-        # Let the base class default method raise the TypeError
-        super(NumpyEncoder, self).default(obj)
-
-class NumpyEncoderBase64(json.JSONEncoder):
-
-    def default(self, obj):
-        """If input object in a ndarray it will be converted into a dict
-        holding dtype, shape and the data
-        """
-        if isinstance(obj, np.ndarray):
-            obj_data = np.ascontiguousarray(obj).data
-            data_list = base64.b64encode(obj_data)
-            if isinstance(data_list, bytes):
-                data_list = data_list.decode(encoding='UTF-8')
-            return dict(__ndarray__=data_list,
-                        dtype=str(obj.dtype),
-                        shape=obj.shape)
-
-        # Let the base class default method raise the TypeError
-        super(NumpyEncoderBase64, self).default(obj)
-
-
 def plugin_info():
     return {
         'name': 'http',
-        'version': '1.9.2',
+        'version': '2.3.0',
         'type': 'north',
         'mode': 'none',
         'interface': '1.0',
@@ -173,18 +129,12 @@ def plugin_init(data):
 
 async def plugin_send(data, payload, stream_id):
     # stream_id (log?)
-    asset_list = config['assetList']['value'].split(",")
-    payloads = [] 
-    for p in payload: 
-        if p['asset_code'] in asset_list or asset_list is []:
-            payloads.append(p) 
-    if payloads is not []: 
-        try:
-            is_data_sent, new_last_object_id, num_sent = await http_north.send_payloads(payloads)
-        except asyncio.CancelledError:
-            pass
-        else:
-            return is_data_sent, new_last_object_id, num_sent
+    try:
+        is_data_sent, new_last_object_id, num_sent = await http_north.send_payloads(payload)
+    except asyncio.CancelledError:
+        pass
+    else:
+        return is_data_sent, new_last_object_id, num_sent
 
 
 def plugin_shutdown(data):
@@ -194,6 +144,43 @@ def plugin_shutdown(data):
 # TODO: North plugin can not be reconfigured? (per callback mechanism)
 def plugin_reconfigure():
     pass
+
+
+# https://stackoverflow.com/questions/3488934/simplejson-and-numpy-array/24375113#24375113
+
+class NumpyEncoder(json.JSONEncoder):
+
+    def default(self, obj):
+        """If input object is an ndarray it will be converted into a dict 
+        holding dtype, shape and the data
+        """
+        if isinstance(obj, np.ndarray):
+            obj_data = np.ascontiguousarray(obj).data
+            data_list = obj_data.tolist()
+            return dict(__ndarray__=data_list,
+                        dtype=str(obj.dtype),
+                        shape=obj.shape)
+        # Let the base class default method raise the TypeError
+        super(NumpyEncoder, self).default(obj)
+
+
+class NumpyEncoderBase64(json.JSONEncoder):
+
+    def default(self, obj):
+        """If input object is an ndarray it will be converted into a dict 
+        holding dtype, shape and the data
+        """
+        if isinstance(obj, np.ndarray):
+            obj_data = np.ascontiguousarray(obj).data
+            data_list = base64.b64encode(obj_data)
+            if isinstance(data_list, bytes):
+                data_list = data_list.decode(encoding='UTF-8')
+            return dict(__ndarray__=data_list,
+                        dtype=str(obj.dtype),
+                        shape=obj.shape)
+
+        # Let the base class default method raise the TypeError
+        super(NumpyEncoderBase64, self).default(obj)
 
 
 class HttpNorthPlugin(object):
@@ -209,19 +196,17 @@ class HttpNorthPlugin(object):
         try:
             payload_block = list()
 
-            for payload in payloads:
-                last_object_id = payload["id"]
-                read = {
-                    "dbms": config['dbName']['value'],
-                    "asset": payload['asset_code'].replace(' ', '_').replace('/', '_'),
-                    "timestamp": payload['user_ts'],
-                    "readings": payload["reading"]
-                }
+            for p in payloads:
+                last_object_id = p["id"]
+                read = dict()
+                read["asset"] = p['asset_code']
+                read["readings"] = p['reading']
+                for k, v in read['readings'].items():
+                    if isinstance(v, np.ndarray):
+                        serialized_data_base64 = json.dumps(v, cls=NumpyEncoderBase64)
+                        read['readings'][k] = serialized_data_base64
 
-                for key, value in read["readings"].items():
-                    if isinstance(value, np.ndarray):
-                        read["readings"][key] = json.dumps(value, cls=NumpyEncoderBase64)
-
+                read["timestamp"] = p['user_ts']
                 payload_block.append(read)
 
             num_sent = await self._send_payloads(payload_block)
@@ -233,34 +218,19 @@ class HttpNorthPlugin(object):
 
     async def _send_payloads(self, payload_block):
         """ send a list of block payloads"""
+
         num_count = 0
         try:
             verify_ssl = False if config["verifySSL"]['value'] == 'false' else True
+            url = config['url']['value']
             connector = aiohttp.TCPConnector(verify_ssl=verify_ssl)
             async with aiohttp.ClientSession(connector=connector) as session:
-                result = await self._send(payload_block, session)
+                result = await self._send(url, payload_block, session)
         except:
             pass
         else: 
             num_count += len(payload_block)
         return num_count
-
-    async def _post_data(self, url, payload, session):
-        headers = {
-            'command': 'data',
-            'topic': config['topicName']['value'],
-            'User-Agent': 'AnyLog/1.23',
-            'content-type': 'text/plain'
-        }
-
-        async with session.post(f'http://{url}', data=json.dumps(payload), headers=headers) as resp:
-            result = await resp.text()
-            status_code = resp.status
-            if   status_code < 200 or status_code > 299:
-                _LOGGER.error("Server error code: %d, reason: %s", status_code, resp.reason)
-                raise Exception
-
-            return result
 
     async def _put_data(self, url, payload, session):
         headers = {
@@ -273,10 +243,8 @@ class HttpNorthPlugin(object):
 
         data = {"timestamp": payload['timestamp']}
 
-        await write_json_to_file(data=payload)
         for key in payload['readings']:
             data[key] = payload['readings'][key]
-            await write_json_to_file(data=data)
 
         async with session.put(f'http://{url}', data=json.dumps(data), headers=headers) as resp:
             result = await resp.text()
