@@ -113,6 +113,11 @@ _DEFAULT_CONFIG = {
 }
 
 
+async def write_json_to_file(data):
+    import aiofiles
+    async with aiofiles.open('/tmp/output.json', 'a') as file:
+        await file.write(json.dumps(data, indent=2))
+
 # https://stackoverflow.com/questions/3488934/simplejson-and-numpy-array/24375113#24375113
 class NumpyEncoder(json.JSONEncoder):
 
@@ -268,10 +273,11 @@ class HttpNorthPlugin(object):
 
         data = {"timestamp": payload['timestamp']}
 
-        _LOGGER.info(payload)
+        await write_json_to_file(data=payload)
         for key in payload['readings']:
             data[key] = payload['readings'][key]
-        _LOGGER.info(f"Inserting Data: {json.dumps(data)}")
+            await write_json_to_file(data=data)
+
         async with session.put(f'http://{url}', data=json.dumps(data), headers=headers) as resp:
             result = await resp.text()
             status_code = resp.status
